@@ -15,6 +15,9 @@
 *.html
 *.htm
 *.sf2
+datasets/paired-dataset-5/quantized
+datasets/paired-dataset-5/performance
+model-output/
 
 .idea/
 notebooks/scratch
