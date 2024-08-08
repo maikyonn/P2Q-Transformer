@@ -141,7 +141,6 @@ class QPDataset(Dataset):
         super().__init__()
         self.seq_len = seq_len
         self.tokenizer = AbsTokenizer(return_tensors=True)
-        self.tokenizer.add_tokens_to_vocab(['<SEP>'])
         self.sos_token = self.tokenizer.encode(['<S>'])
         self.eos_token = self.tokenizer.encode(['<E>'])
         self.pad_token = self.tokenizer.encode(['<P>'])
@@ -149,7 +148,6 @@ class QPDataset(Dataset):
         self.path = path
         self.id2tok = self.tokenizer.id_to_tok
         self.tok2id = self.tokenizer.tok_to_id
-    
 
 
     def load_midi_data(self, path, limit=10000, num_workers=30):
@@ -208,7 +206,7 @@ class QPDataset(Dataset):
 
 def get_ds(train_txt_path, val_txt_path, block_size, train_size_limit, batch_size, num_workers):
     train_ds = QPDataset(train_txt_path, block_size, size_limit=train_size_limit, num_workers=num_workers)
-    val_ds = QPDataset(val_txt_path, block_size, size_limit=train_size_limit // 10, num_workers=num_workers)
+    val_ds = QPDataset(val_txt_path, block_size, size_limit=train_size_limit, num_workers=num_workers)
     
     print("Longest Song Length: ", train_ds.get_max_len_midi_data())
     print("Number of data points in training set: ", len(train_ds))

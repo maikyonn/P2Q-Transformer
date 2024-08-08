@@ -12,7 +12,7 @@ def main(config_path):
     # Load config
     config = load_config(config_path)
 
-    gradient_accumulation_steps=4
+    gradient_accumulation_steps=1
 
     # Initialize the Accelerator
     accelerator = Accelerator(
@@ -28,10 +28,10 @@ def main(config_path):
 
     # Get dataset and dataloaders
     train_dataloader, val_dataloader, vocab_size, tokenizer = get_ds(
-        config['train_txt_path'], config['val_txt_path'], config['block_size'], train_size_limit=config['train_size_limit'], batch_size=config['batch_size'], num_workers=config['workers'])
+        config['train_txt_path'], config['val_txt_path'], config['seq_len'], train_size_limit=config['train_size_limit'], batch_size=config['batch_size'], num_workers=config['workers'])
 
     # Initialize model, optimizer, and loss function
-    model = get_p2q(tokenizer).to(device)
+    model = get_p2q(config, tokenizer).to(device)
 
     loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer.encode([('<P>')]), label_smoothing=0.1).to(device)
     writer = SummaryWriter()

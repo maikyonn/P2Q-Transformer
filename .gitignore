@@ -22,7 +22,10 @@ ghtoken.txt
 .idea/
 notebooks/scratch
 baselines/hft_transformer/model_files/
-
+piano-medium-stacked-1.0.safetensors
+inference/
+runs/
+wandb/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

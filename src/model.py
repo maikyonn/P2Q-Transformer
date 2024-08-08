@@ -206,25 +206,24 @@ class TextDecoder(nn.Module):
 
 
 class P2QTransformer(nn.Module):
-    def __init__(self, dims: ModelConfig):
+    def __init__(self, n_vocab, seq_len, d_model, n_heads, n_layers):
         super().__init__()
-        self.dims = dims
         self.encoder = TextEncoder(
-            self.dims.n_vocab,
-            self.dims.n_text_ctx,
-            self.dims.n_text_state,
-            self.dims.n_text_head,
-            self.dims.n_text_layer,
+            n_vocab,
+            seq_len,
+            d_model,
+            n_heads,
+            n_layers,
         )
         self.decoder = TextDecoder(
-            self.dims.n_vocab,
-            self.dims.n_text_ctx,
-            self.dims.n_text_state,
-            self.dims.n_text_head,
-            self.dims.n_text_layer,
+            n_vocab,
+            seq_len,
+            d_model,
+            n_heads,
+            n_layers,
         )
 
-    def embed_audio(self, mel: torch.Tensor):
+    def encode(self, mel: torch.Tensor):
         return self.encoder(mel)
 
     def logits(self, tokens: torch.Tensor, audio_features: torch.Tensor):

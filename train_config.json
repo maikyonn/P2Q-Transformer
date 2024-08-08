@@ -3,17 +3,23 @@
   "model": "P2Q V1",
   "train_txt_path": "./datasets/paired-dataset-5/paths/train.txt",
   "val_txt_path": "./datasets/paired-dataset-5/paths/validation.txt",
-  "train_size_limit": 1000000,
-  "workers": 64,
-  "batch_size": 32,
-  "block_size": 1024,
+  "train_size_limit": 100,
+  "workers": 30,
+
   "epochs": 100,
   "steps_per_checkpoint": 1000,
   "output_dir": "./model-output",
   "resume_step": null,
   "resume_epoch": null,
   "resume_mode": "ft",
+
   "initial_lr": 5e-4,
   "end_ratio": 0.1,
-  "warmup_steps": 1000
+  "warmup_steps": 1000,
+
+  "batch_size": 16,
+  "seq_len": 1024,
+  "d_model": 768,
+  "n_heads": 12,
+  "n_layers": 6
 }
