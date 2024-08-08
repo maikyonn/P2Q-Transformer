@@ -1,30 +1,38 @@
-import json
-import os
-import csv
-import torch
+
 import torch.nn as nn
-import torch.optim
-from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
 import logging
-import traceback
-from aria.tokenizer import AbsTokenizer
 from src.dataset import get_ds
 from src.load_aria_weights import get_p2q
 from accelerate import Accelerator
-from safetensors.torch import save_file
-from train_utils import _train, load_config, setup_scheduler
-
+from train_utils import _get_optim, _train, load_config
+import wandb
 
 def main(config_path):
+    # Load config
     config = load_config(config_path)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    gradient_accumulation_steps=4
+
+    # Initialize the Accelerator
+    accelerator = Accelerator(
+        mixed_precision='bf16'  # Adjust based on your needs
+    )
+
+    # Initialize wandb only on the main process
+    if accelerator.is_main_process:
+        wandb.init(project=config['model'], config=config)
+
+    # Initialize device
+    device = accelerator.device
+
+    # Get dataset and dataloaders
     train_dataloader, val_dataloader, vocab_size, tokenizer = get_ds(
         config['train_txt_path'], config['val_txt_path'], config['block_size'], train_size_limit=config['train_size_limit'], batch_size=config['batch_size'], num_workers=config['workers'])
+
+    # Initialize model, optimizer, and loss function
     model = get_p2q(tokenizer).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config['initial_lr'], eps=1e-9)
+
     loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer.encode([('<P>')]), label_smoothing=0.1).to(device)
     writer = SummaryWriter()
 
@@ -34,17 +42,26 @@ def main(config_path):
     file_handler = logging.FileHandler('train.log')
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
-
-    accelerator = Accelerator(mixed_precision='fp16')
     num_epochs = config['epochs']
-    steps_per_epoch = len(train_dataloader)
+    steps_per_epoch = len(train_dataloader) / gradient_accumulation_steps
     mode = config['mode']
+
+    # Prepare the model, optimizer, and dataloaders with Accelerator
+    optimizer, scheduler = _get_optim(config['initial_lr'], model, num_epochs, steps_per_epoch, config['warmup_steps'], config['end_ratio'])
+    model, optimizer, train_dataloader, val_dataloader, scheduler= accelerator.prepare(
+        model, optimizer, train_dataloader, val_dataloader, scheduler
+    )
+
 
     if mode not in ["pretrain", "finetune", "resume"]:
         print("Unrecognized mode")
         return
 
-    scheduler = setup_scheduler(optimizer, num_epochs, steps_per_epoch)
+    
+
+    # Log the model and optimizer parameters only on the main process
+    if accelerator.is_main_process:
+        wandb.watch(model, log='all')
 
     if mode == "resume":
         _train(
@@ -82,6 +99,10 @@ def main(config_path):
             resume_epoch=None,
             project_dir=config['output_dir']
         )
+    
+    # Finish the wandb run only on the main process
+    if accelerator.is_main_process:
+        wandb.finish()
 
 if __name__ == "__main__":
     config_path = 'train_config.json'
