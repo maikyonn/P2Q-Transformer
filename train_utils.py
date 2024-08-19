@@ -15,6 +15,10 @@ import wandb
 from amt.config import load_model_config
 from src.model import ModelConfig
 
+
+from aria.data.midi import MidiDict
+from aria.tokenizer import AbsTokenizer
+
 def train_loop(
     dataloader: DataLoader,
     _epoch: int,
@@ -148,6 +152,71 @@ def parse_resume_args():
     parser.add_argument("--resume_mode", type=str, required=True, choices=["pt", "ft"], help="Resume mode")
     return parser.parse_args()
 
+def single_greedy_search(model, tokenizer, enc_input, max_length, device):
+
+    start_token = tokenizer.encode(['<S>'])[0]
+    end_token = tokenizer.encode(['<E>'])[0]
+    pad_token = tokenizer.encode(['<P>'])[0]
+    
+    sequences = [start_token]  # Initialize with the start token
+
+    for pos in range(max_length):
+        chunk = enc_input[pos:pos + 1096]
+        
+        if len(chunk) < max_length:
+            # Padding the last chunk if it's smaller than the window size
+            chunk = chunk + [pad_token] * (max_length - len(chunk))
+        
+        chunk_tensor = torch.tensor(chunk, dtype=torch.long).unsqueeze(0).to(device)
+        
+        encoder_output = model.encode(chunk_tensor)
+
+        current_length = len(sequences)
+        padded_sequences = sequences + [pad_token] * (max_length - current_length)
+        
+        # Convert the sequence list into a tensor wiaath the correct shape
+        input_tensor = torch.tensor(padded_sequences, device=device).unsqueeze(0)  # Adding batch dimension
+
+        with torch.amp.autocast('cuda'):
+            logits = model.logits(input_tensor, encoder_output)
+        
+        logits = logits[:, -1, :]  # Take the logits of the last token
+        next_token = torch.argmax(logits, dim=-1).item()  # Choose the token with the highest probability
+        
+        sequences.append(next_token)  # Append the chosen token to the sequence
+        
+        if next_token == end_token:  # Stop if the end token is generated
+            break
+    
+    return sequences
+
+def test_inference(model, quant_path, perf_path, output_path, device, epoch):
+    tokenizer = AbsTokenizer()
+    midi_dict = MidiDict.from_midi(quant_path)
+    tokenized_midi = tokenizer._tokenize_midi_dict(midi_dict=midi_dict)
+    encoded_midi_seq = tokenizer.encode(tokenized_midi)
+    
+
+    val_midi_dict = MidiDict.from_midi(perf_path)
+    val_tokenized_midi = tokenizer._tokenize_midi_dict(midi_dict=val_midi_dict)
+
+    decoded_seq = single_greedy_search(model, tokenizer, encoded_midi_seq, 256, device)
+    raw_output = tokenizer.decode(decoded_seq)
+    # Append the outputs and epoch number to a file
+    with open(output_path, 'a') as f:
+        f.write(f"Epoch: {epoch}\n")
+        f.write("Tokenized MIDI Sequence:\n")
+        f.write(str(tokenized_midi[1:256]) + '\n\n')
+        f.write("Raw Output:\n")
+        f.write(str(raw_output[:256]) + '\n')
+        f.write("Actual Output:\n")
+        f.write(str(val_tokenized_midi[:256]) + '\n')
+        f.write("="*50 + "\n")  # Separator for clarity
+
+    return tokenized_midi, raw_output
+
+
+
 def _train(
     epochs: int,
     accelerator: Accelerator,
@@ -188,6 +257,8 @@ def _train(
         logger.info(f"Resuming training from step {resume_step} - logging as EPOCH {resume_epoch}")
         skipped_dataloader = accelerator.skip_first_batches(dataloader=train_dataloader, num_batches=resume_step)
 
+        test_inference(model, midi_path="datasets/paired-dataset-5/performance/audio-https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DL2KdUIeYTQo.mid", output_path='./inf.txt', device=device)
+
         avg_train_loss, global_step = train_loop(
             dataloader=skipped_dataloader,
             _epoch=resume_epoch,
@@ -214,6 +285,7 @@ def _train(
 
     for epoch in range(start_epoch, epochs + start_epoch):
         try:
+            test_inference(model, quant_path='datasets/paired-dataset-5/quantized/Papillons op2.mid', perf_path='datasets/paired-dataset-5/performance/audio-https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D5csG23b4k9U.mid', output_path='./inf-val.txt', device=device, epoch=epoch)
             avg_train_loss, global_step = train_loop(
                 dataloader=train_dataloader,
                 _epoch=epoch,

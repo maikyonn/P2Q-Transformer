@@ -18,7 +18,7 @@
   "warmup_steps": 1000,
 
   "batch_size": 16,
-  "seq_len": 1024,
+  "seq_len": 2048,
   "d_model": 768,
   "n_heads": 12,
   "n_layers": 6
